@@ -1,165 +1,176 @@
-let CURRENT_USER = null;
+let currentUser = null;
 
-const pusher = new Pusher("b7d05dcc13df522efbbc", { cluster: "us2" });
-const channel = pusher.subscribe("chat");
-
-channel.bind("message", function(data) {
-  addMessage(data);
+// ---------- Pusher Setup ----------
+const pusher = new Pusher("b7d05dcc13df522efbbc", {
+  cluster: "us2",
 });
 
-// LOGIN / SIGNUP
-function login() {
-  const username = document.getElementById("usernameInput").value;
+const channel = pusher.subscribe("chat");
+channel.bind("message", function(data) {
+  addMessageToUI(data);
+});
+
+// ---------- LOGIN/SIGNUP ----------
+async function signup() {
+  const username = document.getElementById("usernameInput").value.trim();
   const password = document.getElementById("passwordInput").value;
 
-  fetch("/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success){
-      CURRENT_USER = data.user;
-      startChat();
-    } else {
-      document.getElementById("loginError").innerText = data.message;
-    }
+  if (!/^[a-zA-Z0-9]+$/.test(username)) {
+    alert("Username must contain only letters and numbers.");
+    return;
+  }
+
+  const res = await fetch("/signup", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username,password})
   });
+  const data = await res.json();
+  if (data.success) loginUser(data.user);
+  else alert(data.message);
 }
 
-function signup() {
-  const username = document.getElementById("usernameInput").value;
+async function login() {
+  const username = document.getElementById("usernameInput").value.trim();
   const password = document.getElementById("passwordInput").value;
 
-  fetch("/signup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if(data.success){
-      CURRENT_USER = data.user;
-      startChat();
-    } else {
-      document.getElementById("loginError").innerText = data.message;
-    }
+  const res = await fetch("/login", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username,password})
   });
+  const data = await res.json();
+  if (data.success) loginUser(data.user);
+  else alert(data.message);
 }
 
-// START CHAT
-function startChat(){
+function loginUser(user) {
+  currentUser = user;
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
-  document.getElementById("currentAvatar").src = `/uploads/profilePics/${CURRENT_USER.avatar}`;
-  document.getElementById("currentUsername").innerText = CURRENT_USER.username;
-  if(CURRENT_USER.isModerator) document.getElementById("adminPanel").style.display = "block";
+  document.getElementById("userDisplay").innerText = user.username;
+  document.getElementById("userAvatar").src = "/uploads/profilePics/" + user.avatar;
+
+  if (user.isModerator) document.getElementById("adminPanel").style.display = "flex";
 }
 
-// MESSAGES
-function sendMessage(){
-  const msg = document.getElementById("chatMessage").value;
-  if(!msg) return;
-  fetch("/sendMessage", {
+// ---------- CHAT ----------
+async function sendMessage() {
+  const message = document.getElementById("chatMessage").value;
+  if (!message) return;
+  const res = await fetch("/send-message", {
     method:"POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ message: msg, username: CURRENT_USER.username })
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username: currentUser.username, message})
   });
-  document.getElementById("chatMessage").value = "";
+  const data = await res.json();
+  if (data.success) document.getElementById("chatMessage").value = "";
 }
 
-function addMessage(data){
+function addMessageToUI({username,message,avatar}) {
+  const messages = document.getElementById("messages");
   const msgDiv = document.createElement("div");
   msgDiv.classList.add("message");
   msgDiv.innerHTML = `
-    <img src="/uploads/profilePics/${data.avatar}" onclick="openProfileOverlay('${data.username}')">
-    <span>${data.username}</span>: <p>${data.message}</p>
+    <img src="/uploads/profilePics/${avatar}" />
+    <span class="username" onclick="openProfile('${username}')">${username}</span>: 
+    <span class="msg-text">${message}</span>
   `;
-  document.getElementById("messages").appendChild(msgDiv);
-  document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+  messages.appendChild(msgDiv);
+  messages.scrollTop = messages.scrollHeight;
 }
 
-// ADMIN PANEL
-function banUser(){
-  const username = document.getElementById("banUserInput").value;
-  fetch("/banUser", {
+// ---------- PROFILE ----------
+async function openProfile(username) {
+  const res = await fetch(`/get-user?username=${username}`);
+  const data = await res.json();
+  if (!data.success) return;
+
+  const profile = data.user;
+  document.getElementById("profileUsername").innerText = profile.username;
+  document.getElementById("profileAvatar").src = "/uploads/profilePics/" + profile.avatar;
+  document.getElementById("profileBio").value = profile.bio || "";
+  document.getElementById("profileJoinDate").innerText = "Joined: " + new Date(profile.joinDate).toLocaleDateString();
+  
+  // Edit buttons only if currentUser viewing own profile
+  if (currentUser.username === username) {
+    document.getElementById("profileBio").readOnly = true;
+    document.getElementById("editButtons").style.display = "block";
+  } else {
+    document.getElementById("editButtons").style.display = "none";
+    document.getElementById("profileBio").readOnly = true;
+  }
+
+  document.getElementById("profilePage").style.display = "flex";
+}
+
+function closeProfile() {
+  document.getElementById("profilePage").style.display = "none";
+}
+
+// ---------- EDIT BIO ----------
+function editBio() {
+  document.getElementById("profileBio").readOnly = false;
+  document.getElementById("saveBioBtn").style.display = "inline";
+}
+
+async function saveBio() {
+  const bio = document.getElementById("profileBio").value;
+  const res = await fetch("/update-bio", {
     method:"POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ username })
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username: currentUser.username,bio})
   });
-}
-
-function unbanUser(){
-  const username = document.getElementById("banUserInput").value;
-  fetch("/unbanUser", {
-    method:"POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ username })
-  });
-}
-
-// PROFILE OVERLAY
-function openProfileOverlay(username){
-  fetch(`/profile/${username}`)
-  .then(res => res.json())
-  .then(data => {
-    if(!data.success) return;
-    const u = data.user;
-    const isCurrentUser = CURRENT_USER.username === u.username;
-
-    const avatarHTML = isCurrentUser
-      ? `<img src="/uploads/profilePics/${u.avatar}" class="userAvatar" id="editAvatarPreview" onclick="triggerAvatarUpload()">
-         <input type="file" id="editAvatar" style="display:none;" onchange="previewAvatar(this)">`
-      : `<img src="/uploads/profilePics/${u.avatar}" class="userAvatar">`;
-
-    const bioHTML = isCurrentUser
-      ? `<textarea id="editBio">${u.bio || ""}</textarea>`
-      : `<p class="bioText">${u.bio || "No bio yet"}</p>`;
-
-    const saveBtnHTML = isCurrentUser ? `<button onclick="saveProfile()">Save</button>` : "";
-
-    document.getElementById("profilePage").innerHTML = `
-      <div class="profileBox">
-        <button class="exitBtn" onclick="closeProfile()">X</button>
-        ${avatarHTML}
-        <h2>${u.username}</h2>
-        ${bioHTML}
-        <p>Joined: ${new Date(u.joinDate).toLocaleDateString()}</p>
-        ${saveBtnHTML}
-      </div>
-    `;
-    document.getElementById("profilePage").style.display = "flex";
-  });
-}
-
-function triggerAvatarUpload(){ document.getElementById("editAvatar").click(); }
-function previewAvatar(input){
-  if(input.files && input.files[0]){
-    const reader = new FileReader();
-    reader.onload = e => document.getElementById("editAvatarPreview").src = e.target.result;
-    reader.readAsDataURL(input.files[0]);
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById("profileBio").readOnly = true;
+    document.getElementById("saveBioBtn").style.display = "none";
   }
 }
 
-function closeProfile(){ document.getElementById("profilePage").style.display="none"; }
+// ---------- AVATAR UPLOAD ----------
+function uploadAvatar() {
+  document.getElementById("avatarInput").click();
+}
 
-function saveProfile(){
-  const bio = document.getElementById("editBio").value;
-  const avatarFile = document.getElementById("editAvatar").files[0];
+async function submitAvatar(event) {
+  const file = event.target.files[0];
   const formData = new FormData();
-  formData.append("username", CURRENT_USER.username);
-  formData.append("bio", bio);
-  if(avatarFile) formData.append("avatar", avatarFile);
+  formData.append("avatar", file);
+  formData.append("username", currentUser.username);
 
-  fetch("/updateProfile",{ method:"POST", body:formData })
-  .then(res=>res.json())
-  .then(data=>{
-    if(data.success){
-      CURRENT_USER.bio = bio;
-      if(data.filename) CURRENT_USER.avatar = data.filename;
-      document.getElementById("currentAvatar").src = `/uploads/profilePics/${CURRENT_USER.avatar}`;
-      closeProfile();
-    }
+  const res = await fetch("/update-avatar", {
+    method:"POST",
+    body: formData
   });
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById("profileAvatar").src = "/uploads/profilePics/" + data.filename;
+    document.getElementById("userAvatar").src = "/uploads/profilePics/" + data.filename;
+  }
+}
+
+// ---------- ADMIN PANEL ----------
+async function banUser() {
+  const username = document.getElementById("banUserInput").value.trim();
+  if (!username) return;
+  const res = await fetch("/ban-user", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username})
+  });
+  const data = await res.json();
+  if (data.success) alert(username + " banned!");
+}
+
+async function unbanUser() {
+  const username = document.getElementById("banUserInput").value.trim();
+  if (!username) return;
+  const res = await fetch("/unban-user", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username})
+  });
+  const data = await res.json();
+  if (data.success) alert(username + " unbanned!");
 }
