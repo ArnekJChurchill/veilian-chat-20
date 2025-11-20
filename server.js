@@ -1,21 +1,14 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const bodyParser = require("body-parser");
 const Pusher = require("pusher");
-const fileUpload = require("express-fileupload");
+const multer = require("multer");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(fileUpload());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use(express.static(path.join(__dirname, "public")));
+const PORT = process.env.PORT || 10000;
 
-const usersFile = path.join(__dirname, "data/users.json");
-const bannedFile = path.join(__dirname, "data/banned.json");
-
-// Pusher setup
+// ---------- Pusher ----------
 const pusher = new Pusher({
   appId: "2080160",
   key: "b7d05dcc13df522efbbc",
@@ -24,40 +17,58 @@ const pusher = new Pusher({
   useTLS: true
 });
 
-// ----------------- Helper functions -----------------
+// ---------- Middleware ----------
+app.use(bodyParser.json());
+app.use(express.static("public"));
+app.use("/uploads/profilePics", express.static("uploads/profilePics"));
+
+// ---------- Multer Setup for Avatars ----------
+const storage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    cb(null, "uploads/profilePics");
+  },
+  filename: function(req, file, cb) {
+    const ext = path.extname(file.originalname);
+    cb(null, req.body.username + ext);
+  }
+});
+const upload = multer({ storage });
+
+// ---------- Data Helpers ----------
+const USERS_FILE = "./data/users.json";
+const BANNED_FILE = "./data/banned.json";
+
 function readUsers() {
-  return JSON.parse(fs.readFileSync(usersFile));
+  return JSON.parse(fs.readFileSync(USERS_FILE));
 }
 
 function writeUsers(data) {
-  fs.writeFileSync(usersFile, JSON.stringify(data, null, 2));
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
 }
 
 function readBanned() {
-  return JSON.parse(fs.readFileSync(bannedFile));
+  return JSON.parse(fs.readFileSync(BANNED_FILE));
 }
 
 function writeBanned(data) {
-  fs.writeFileSync(bannedFile, JSON.stringify(data, null, 2));
+  fs.writeFileSync(BANNED_FILE, JSON.stringify(data, null, 2));
 }
 
-function isValidUsername(username) {
-  return /^[a-zA-Z0-9]+$/.test(username); // Only letters & numbers
-}
-
-// ----------------- Authentication -----------------
+// ---------- SIGNUP ----------
 app.post("/signup", (req, res) => {
-  const { username, password, displayName } = req.body;
-  if (!username || !password) return res.json({ success: false, message: "Missing username or password." });
-  if (!isValidUsername(username)) return res.json({ success: false, message: "Username invalid. Only letters & numbers allowed." });
+  const { username, password } = req.body;
+  if (!username || !password || !/^[a-zA-Z0-9]+$/.test(username)) {
+    return res.json({ success: false, message: "Invalid username or password." });
+  }
 
   const usersData = readUsers();
-  if (usersData.users.find(u => u.username === username)) return res.json({ success: false, message: "Username already exists." });
+  if (usersData.users.find(u => u.username === username)) {
+    return res.json({ success: false, message: "Username already exists." });
+  }
 
   const newUser = {
     username,
     password,
-    displayName: displayName || username,
     isModerator: false,
     avatar: "default.png",
     bio: "",
@@ -65,83 +76,97 @@ app.post("/signup", (req, res) => {
   };
   usersData.users.push(newUser);
   writeUsers(usersData);
-
   res.json({ success: true, user: newUser });
 });
 
+// ---------- LOGIN ----------
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
   const usersData = readUsers();
-  const bannedUsers = readBanned().banned;
+  const banned = readBanned().banned;
 
-  const user = usersData.users.find(u => u.username === username && u.password === password);
-  if (!user) return res.json({ success: false, message: "Invalid username or password." });
-  if (bannedUsers.includes(username)) return res.json({ success: false, message: "You are banned and cannot log in." });
+  const user = usersData.users.find(u => u.username === username);
+  if (!user) return res.json({ success: false, message: "User not found." });
+  if (user.password !== password) return res.json({ success: false, message: "Incorrect password." });
+  if (banned.includes(username)) return res.json({ success: false, message: "You are banned." });
 
   res.json({ success: true, user });
 });
 
-// ----------------- Chat -----------------
+// ---------- SEND MESSAGE ----------
 app.post("/send-message", (req, res) => {
   const { username, message } = req.body;
   const usersData = readUsers();
-  const bannedUsers = readBanned().banned;
-
   const user = usersData.users.find(u => u.username === username);
-  if (!user) return res.json({ success: false, message: "User not found." });
-  if (bannedUsers.includes(username)) return res.json({ success: false, message: "You are banned and cannot send messages." });
 
-  pusher.trigger("chat", "message", { username: user.username, avatar: user.avatar, message });
+  if (!user) return res.json({ success: false, message: "User not found." });
+
+  const banned = readBanned().banned;
+  if (banned.includes(username)) {
+    return res.json({ success: false, message: "You are banned and cannot send messages." });
+  }
+
+  pusher.trigger("chat", "message", {
+    username: user.username,
+    message,
+    avatar: user.avatar
+  });
+
   res.json({ success: true });
 });
 
-// ----------------- Ban / Unban -----------------
-app.post("/ban-user", (req, res) => {
-  const { username, moderatorUsername, moderatorPassword } = req.body;
+// ---------- GET USER ----------
+app.get("/get-user", (req, res) => {
+  const username = req.query.username;
   const usersData = readUsers();
-  const mod = usersData.users.find(u => u.username === moderatorUsername && u.password === moderatorPassword && u.isModerator);
-  if (!mod) return res.json({ success: false, message: "Unauthorized." });
+  const user = usersData.users.find(u => u.username === username);
+  if (!user) return res.json({ success: false });
+  res.json({ success: true, user });
+});
 
+// ---------- UPDATE BIO ----------
+app.post("/update-bio", (req, res) => {
+  const { username, bio } = req.body;
+  const usersData = readUsers();
+  const user = usersData.users.find(u => u.username === username);
+  if (!user) return res.json({ success: false });
+
+  user.bio = bio;
+  writeUsers(usersData);
+  res.json({ success: true });
+});
+
+// ---------- UPDATE AVATAR ----------
+app.post("/update-avatar", upload.single("avatar"), (req, res) => {
+  const username = req.body.username;
+  const usersData = readUsers();
+  const user = usersData.users.find(u => u.username === username);
+  if (!user) return res.json({ success: false });
+
+  user.avatar = req.file.filename;
+  writeUsers(usersData);
+  res.json({ success: true, filename: req.file.filename });
+});
+
+// ---------- BAN USER ----------
+app.post("/ban-user", (req, res) => {
+  const { username } = req.body;
   const bannedData = readBanned();
   if (!bannedData.banned.includes(username)) bannedData.banned.push(username);
   writeBanned(bannedData);
-
-  res.json({ success: true, message: `${username} banned.` });
+  res.json({ success: true });
 });
 
+// ---------- UNBAN USER ----------
 app.post("/unban-user", (req, res) => {
-  const { username, moderatorUsername, moderatorPassword } = req.body;
-  const usersData = readUsers();
-  const mod = usersData.users.find(u => u.username === moderatorUsername && u.password === moderatorPassword && u.isModerator);
-  if (!mod) return res.json({ success: false, message: "Unauthorized." });
-
-  const bannedData = readBanned();
+  const { username } = req.body;
+  let bannedData = readBanned();
   bannedData.banned = bannedData.banned.filter(u => u !== username);
   writeBanned(bannedData);
-
-  res.json({ success: true, message: `${username} unbanned.` });
+  res.json({ success: true });
 });
 
-// ----------------- Avatar Upload -----------------
-app.post("/upload-avatar", (req, res) => {
-  const { username } = req.body;
-  if (!req.files || !req.files.avatar) return res.json({ success: false, message: "No file uploaded." });
-
-  const file = req.files.avatar;
-  const ext = path.extname(file.name);
-  const newFilename = `${username}${ext}`;
-  const uploadPath = path.join(__dirname, "uploads/profilePics", newFilename);
-
-  file.mv(uploadPath, err => {
-    if (err) return res.status(500).json({ success: false, message: err });
-    const usersData = readUsers();
-    const user = usersData.users.find(u => u.username === username);
-    if (user) {
-      user.avatar = newFilename;
-      writeUsers(usersData);
-    }
-    res.json({ success: true, avatar: newFilename });
-  });
+// ---------- START SERVER ----------
+app.listen(PORT, () => {
+  console.log(`Veilian-Chat-Nue running on http://localhost:${PORT}`);
 });
-
-app.listen(10000, () => console.log("Veilian-Chat-Nue running on port 10000"));
