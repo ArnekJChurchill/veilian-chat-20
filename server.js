@@ -83,19 +83,31 @@ app.post("/login", (req, res) => {
 });
 
 // ----------------- CHAT ROUTE -----------------
-app.post("/sendMessage", (req, res) => {
-  const { message, username } = req.body;
+app.post("/send-message", (req, res) => {
+  const { username, message } = req.body;
   const usersData = readUsers();
   const user = usersData.users.find(u => u.username === username);
-  if (!user) return res.json({ success: false });
 
+  if (!user) {
+    return res.json({ success: false, message: "User not found." });
+  }
+
+  // Check if user is banned
+  const banned = require("./data/banned.json").banned;
+  if (banned.includes(username)) {
+    return res.json({ success: false, message: "You are banned and cannot send messages." });
+  }
+
+  // Otherwise, send message via Pusher
   pusher.trigger("chat", "message", {
     username: user.username,
     message,
     avatar: user.avatar
   });
+
   res.json({ success: true });
 });
+
 
 // ----------------- ADMIN PANEL ROUTES -----------------
 app.post("/banUser", (req, res) => {
