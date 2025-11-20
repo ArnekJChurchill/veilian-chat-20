@@ -1,46 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Veilian Chat 20</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://js.pusher.com/7.2/pusher.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veilian Chat Nue</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://js.pusher.com/7.2/pusher.min.js"></script>
 </head>
 <body>
-  <!-- LOGIN -->
-  <div id="loginScreen">
-    <h1>Veilian Chat 20</h1>
-    <input id="usernameInput" placeholder="Username">
-    <input id="passwordInput" type="password" placeholder="Password">
-    <button onclick="login()">Login</button>
+
+<!-- LOGIN / SIGNUP SCREEN -->
+<div id="loginScreen">
+  <h1>Veilian Chat Nue</h1>
+  <input id="usernameInput" placeholder="@username">
+  <input id="passwordInput" type="password" placeholder="Password">
+  <div class="loginButtons">
     <button onclick="signup()">Sign Up</button>
+    <button onclick="login()">Login</button>
   </div>
+  <p id="loginError" class="error"></p>
+</div>
 
-  <!-- CHAT -->
-  <div id="chatScreen" style="display:none;">
-    <div class="topBar">
-      <button onclick="openProfileEditor()">Edit Profile</button>
-      <div id="adminPanel" style="display:none;">
-        <h3>Admin Panel</h3>
-        <input id="banUserInput" placeholder="Ban username">
-        <button onclick="banUser()">Ban</button>
-        <input id="unbanUserInput" placeholder="Unban username">
-        <button onclick="unbanUser()">Unban</button>
-      </div>
+<!-- CHAT SCREEN -->
+<div id="chatScreen" style="display:none;">
+  <div class="topBar">
+    <div id="userBongle" onclick="openProfileOverlay(CURRENT_USER.username)">
+      <img id="currentAvatar" src="/uploads/profilePics/default.png" class="avatar">
+      <span id="currentUsername"></span>
     </div>
-
-    <div id="messages" class="messages"></div>
-
-    <div class="chatInput">
-      <input id="chatMessage" placeholder="Message...">
-      <button onclick="sendMessage()">Send</button>
+    <div id="adminPanel" style="display:none;">
+      <h3>Admin Panel</h3>
+      <input id="banUserInput" placeholder="Username">
+      <button onclick="banUser()">Ban</button>
+      <button onclick="unbanUser()">Unban</button>
     </div>
   </div>
 
-  <!-- PROFILE PAGE -->
-  <div id="profilePage" style="display:none;"></div>
+  <div id="messages" class="messages"></div>
 
-  <script src="app.js"></script>
+  <div class="messageInput">
+    <input id="chatMessage" placeholder="Message...">
+    <button onclick="sendMessage()">Send</button>
+    <button onclick="openProfileOverlay(CURRENT_USER.username)">Edit Profile</button>
+  </div>
+</div>
+
+<!-- PROFILE PAGE OVERLAY -->
+<div id="profilePage"></div>
+
+<script src="app.js"></script>
 </body>
 </html>
-
