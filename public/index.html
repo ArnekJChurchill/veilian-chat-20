@@ -1,65 +1,448 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Veilian Chat Nue</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://js.pusher.com/7.2/pusher.min.js"></script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Veilian — Full UI (Login / Chat / Profiles / Moderator)</title>
+<style>
+  :root{--bg:#f2f2f2;--card:#fff;--accent:#4a90e2;--danger:#d9534f;--muted:#777}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);color:#111}
+
+  /* Centered login */
+  .center-wrap{height:100vh;display:flex;align-items:center;justify-content:center}
+  .card{background:var(--card);padding:28px;border-radius:12px;box-shadow:0 8px 30px rgba(16,24,40,0.08);width:360px}
+  h1{margin:0 0 12px;font-size:20px}
+  input[type=text],input[type=password],textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #d7d7d7;font-size:14px}
+  .row{display:flex;gap:10px}
+  button{padding:10px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+  button.secondary{background:#eee;color:#111}
+  .msg{min-height:22px;margin-top:8px;color:var(--danger);font-weight:600}
+
+  /* App layout */
+  .app{display:flex;height:100vh}
+  .left{width:220px;background:#efefef;padding:18px;display:flex;flex-direction:column;gap:12px}
+  .left .profile-small{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .left img.avatar-small{width:44px;height:44px;border-radius:50%;object-fit:cover}
+  .left .username-small{font-weight:700}
+
+  .main{flex:1;display:flex;flex-direction:column}
+  .chat-display{flex:1;padding:20px;overflow:auto;background:linear-gradient(180deg,#fafafa,#fff)}
+  .message{display:flex;gap:10px;margin-bottom:12px;align-items:flex-start}
+  .message .meta{font-size:12px;color:var(--muted)}
+  .message.me{flex-direction:row-reverse}
+  .message .bubble{max-width:70%;padding:10px 12px;border-radius:10px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,0.03)}
+  .input-row{display:flex;padding:12px;border-top:1px solid #eee;gap:8px}
+  .input-row input{flex:1}
+
+  /* Admin panel */
+  .admin{width:240px;background:#fff;border-left:1px solid #eee;padding:18px}
+  .admin h3{margin:0 0 10px}
+  .admin .admin-buttons{display:flex;gap:8px}
+  .admin button.warn{background:var(--danger)}
+
+  /* Profile modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center}
+  .modal .panel{width:420px;background:#fff;padding:20px;border-radius:12px;position:relative;text-align:center}
+  .modal .panel .exit{position:absolute;right:12px;top:12px;border:0;background:transparent;cursor:pointer}
+  .profile-avatar-large{width:120px;height:120px;border-radius:50%;object-fit:cover;cursor:pointer}
+  .bio-section{margin-top:12px}
+  textarea#bio{height:80px}
+  .small{font-size:13px;color:var(--muted)}
+  .hidden{display:none}
+
+  /* Responsive tweaks */
+  @media (max-width:900px){.admin{display:none}.left{display:none}}
+</style>
 </head>
 <body>
-  <!-- LOGIN/SIGNUP -->
-  <div id="loginScreen">
-    <h1>Veilian Chat Nue</h1>
-    <input id="usernameInput" placeholder="Username" />
-    <input id="passwordInput" type="password" placeholder="Password" />
-    <div class="login-buttons">
-      <button onclick="signup()">Sign Up</button>
-      <button onclick="login()">Login</button>
+
+<!-- LOGIN / SIGNUP SCREEN -->
+<div id="loginScreen" class="center-wrap">
+  <div class="card">
+    <h1>Veilian Chat — Login / Sign up</h1>
+    <label>Username (letters, numbers, hyphens only — no spaces or special chars)</label>
+    <input id="usernameInput" type="text" placeholder="exampleuser" maxlength="32" />
+    <label style="margin-top:8px">Password</label>
+    <input id="passwordInput" type="password" placeholder="password" />
+
+    <div class="row" style="margin-top:12px">
+      <button id="loginBtn">Login</button>
+      <button id="signupBtn" class="secondary">Sign Up</button>
     </div>
-    <div id="loginError" class="error-msg"></div>
+
+    <div id="loginMsg" class="msg" aria-live="polite"></div>
+    <p class="small" style="margin-top:10px">Demo uses browser storage. In a real app, hook these actions to your server.</p>
+  </div>
+</div>
+
+<!-- MAIN APP (hidden until login) -->
+<div id="appRoot" class="app hidden" style="display:none">
+  <div class="left">
+    <div class="profile-small" id="profileBongle">
+      <img class="avatar-small" id="leftAvatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>">
+      <div>
+        <div class="username-small" id="leftUsername">username</div>
+        <div class="small" id="leftJoinDate">Joined: —</div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px">
+      <strong>Active users</strong>
+      <div id="userList" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
   </div>
 
-  <!-- CHAT SCREEN -->
-  <div id="chatScreen" style="display:none;">
-    <div class="chat-header">
-      <div class="user-bongle" onclick="openProfile(currentUser.username)">
-        <img id="userAvatar" src="/uploads/profilePics/default.png" alt="Avatar" />
-        <span id="userDisplay"></span>
-      </div>
-      <div id="adminPanel" style="display:none;">
-        <h3>Admin Panel</h3>
-        <input id="banUserInput" placeholder="Username" />
-        <button onclick="banUser()">Ban</button>
-        <button onclick="unbanUser()">Unban</button>
-      </div>
+  <div class="main">
+    <div style="padding:12px 18px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:12px">
+      <strong id="roomTitle">ZE CHAT (normie)</strong>
+      <div style="margin-left:auto;font-size:13px;color:var(--muted)">Status: <span id="statusDot">online</span></div>
     </div>
 
-    <div id="messages" class="messages"></div>
+    <div id="chatDisplay" class="chat-display" role="log" aria-live="polite"></div>
 
-    <div class="chat-input">
-      <input id="chatMessage" placeholder="Message..." />
-      <button onclick="sendMessage()">Send</button>
-      <button onclick="openProfile(currentUser.username)">Edit Profile</button>
+    <div class="input-row">
+      <input id="msgInput" type="text" placeholder="Enter message..." />
+      <button id="sendBtn">Send</button>
     </div>
   </div>
 
-  <!-- PROFILE PAGE -->
-  <div id="profilePage" style="display:none;">
-    <button id="closeProfileBtn" onclick="closeProfile()">X</button>
-    <div class="profile-content">
-      <img id="profileAvatar" src="/uploads/profilePics/default.png" alt="Avatar" onclick="uploadAvatar()" />
-      <h2 id="profileUsername"></h2>
-      <textarea id="profileBio" readonly></textarea>
-      <div id="editButtons" style="display:none;">
-        <button onclick="editBio()">Edit</button>
-        <button id="saveBioBtn" onclick="saveBio()" style="display:none;">Save</button>
-      </div>
-      <p id="profileJoinDate"></p>
-      <input type="file" id="avatarInput" style="display:none" onchange="submitAvatar(event)" />
+  <div class="admin" id="adminPanel">
+    <h3>Moderator Panel</h3>
+    <label class="small">Manage user</label>
+    <input id="adminUserInput" type="text" placeholder="username to ban/unban" />
+    <div class="admin-buttons" style="margin-top:8px">
+      <button id="unbanBtn" class="secondary">Unban</button>
+      <button id="banBtn" class="warn">Ban</button>
+    </div>
+    <div style="margin-top:12px">
+      <label class="small">Make moderator</label>
+      <input id="modUserInput" type="text" placeholder="username to toggle mod" />
+      <button id="toggleModBtn" style="margin-top:8px">Toggle Mod</button>
     </div>
   </div>
+</div>
 
-  <script src="app.js"></script>
+<!-- Profile modal (self-editable) -->
+<div id="profileModal" class="modal">
+  <div class="panel">
+    <button class="exit" id="closeProfile">✕</button>
+    <img id="profileAvatarLarge" class="profile-avatar-large" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>" title="Click to upload" />
+    <h2 id="profileNameLarge">username</h2>
+
+    <div class="bio-section">
+      <label class="small">Bio</label>
+      <textarea id="bio"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;justify-content:center">
+        <button id="saveBioBtn">Save</button>
+        <button id="cancelBioBtn" class="secondary">Cancel</button>
+      </div>
+    </div>
+
+    <p class="small" style="margin-top:8px">Joined: <span id="profileJoinLarge">—</span></p>
+    <input id="avatarFileInput" type="file" accept="image/*" class="hidden" />
+  </div>
+</div>
+
+<!-- Other user's profile modal (read-only) -->
+<div id="otherProfileModal" class="modal">
+  <div class="panel">
+    <button class="exit" id="closeOtherProfile">✕</button>
+    <img id="otherAvatarLarge" class="profile-avatar-large" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>" />
+    <h2 id="otherNameLarge">other user</h2>
+    <div class="bio-section">
+      <label class="small">Bio</label>
+      <textarea id="otherBio" disabled></textarea>
+    </div>
+    <p class="small" style="margin-top:8px">Joined: <span id="otherJoinLarge">—</span></p>
+  </div>
+</div>
+
+<script>
+// ---------------------------
+// Simple localStorage-backed demo backend
+// ---------------------------
+
+const DB_USERS_KEY = 'veilian_users_v1'; // stores user objects by username
+const DB_MESSAGES_KEY = 'veilian_messages_v1'; // array of messages
+const DB_BANNED_KEY = 'veilian_banned_v1';
+
+// Helpers
+function loadUsers(){try{return JSON.parse(localStorage.getItem(DB_USERS_KEY) || '{}')}catch(e){return {}}}
+function saveUsers(u){localStorage.setItem(DB_USERS_KEY, JSON.stringify(u))}
+function loadMessages(){try{return JSON.parse(localStorage.getItem(DB_MESSAGES_KEY) || '[]')}catch(e){return []}}
+function saveMessages(m){localStorage.setItem(DB_MESSAGES_KEY, JSON.stringify(m))}
+function loadBanned(){try{return JSON.parse(localStorage.getItem(DB_BANNED_KEY) || '[]')}catch(e){return []}}
+function saveBanned(b){localStorage.setItem(DB_BANNED_KEY, JSON.stringify(b))}
+
+// Utility: username validation (no spaces, no underscore, no @ or special chars)
+function validUsername(u){return /^[A-Za-z0-9-]{3,32}$/.test(u)}
+
+// UI refs
+const loginScreen = document.getElementById('loginScreen');
+const appRoot = document.getElementById('appRoot');
+const loginMsg = document.getElementById('loginMsg');
+const usernameInput = document.getElementById('usernameInput');
+const passwordInput = document.getElementById('passwordInput');
+const loginBtn = document.getElementById('loginBtn');
+const signupBtn = document.getElementById('signupBtn');
+
+const leftAvatar = document.getElementById('leftAvatar');
+const leftUsername = document.getElementById('leftUsername');
+const leftJoinDate = document.getElementById('leftJoinDate');
+const profileBongle = document.getElementById('profileBongle');
+
+const chatDisplay = document.getElementById('chatDisplay');
+const msgInput = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+
+const userList = document.getElementById('userList');
+
+const adminPanel = document.getElementById('adminPanel');
+const adminUserInput = document.getElementById('adminUserInput');
+const banBtn = document.getElementById('banBtn');
+const unbanBtn = document.getElementById('unbanBtn');
+const modUserInput = document.getElementById('modUserInput');
+const toggleModBtn = document.getElementById('toggleModBtn');
+
+const profileModal = document.getElementById('profileModal');
+const profileAvatarLarge = document.getElementById('profileAvatarLarge');
+const profileNameLarge = document.getElementById('profileNameLarge');
+const profileJoinLarge = document.getElementById('profileJoinLarge');
+const bioTextarea = document.getElementById('bio');
+const saveBioBtn = document.getElementById('saveBioBtn');
+const cancelBioBtn = document.getElementById('cancelBioBtn');
+const avatarFileInput = document.getElementById('avatarFileInput');
+const closeProfile = document.getElementById('closeProfile');
+
+const otherProfileModal = document.getElementById('otherProfileModal');
+const closeOtherProfile = document.getElementById('closeOtherProfile');
+const otherAvatarLarge = document.getElementById('otherAvatarLarge');
+const otherNameLarge = document.getElementById('otherNameLarge');
+const otherJoinLarge = document.getElementById('otherJoinLarge');
+const otherBioTextarea = document.getElementById('otherBio');
+
+let CUR_USER = null; // {username,password,avatar,bio,joined,isMod}
+
+// ---------------------------
+// Account actions (signup/login)
+// ---------------------------
+
+function showMsg(text, error=true){loginMsg.textContent = text; loginMsg.style.color = error ? 'var(--danger)' : 'green'}
+
+signupBtn.addEventListener('click', ()=>{
+  const u = usernameInput.value.trim();
+  const p = passwordInput.value;
+  if(!validUsername(u)){showMsg('Invalid username. Use 3-32 chars: letters, numbers, hyphens.');return}
+  if(!p || p.length < 4){showMsg('Password must be at least 4 chars.');return}
+  const users = loadUsers();
+  if(users[u]){showMsg('Username already exists, please use a different one.');return}
+  const now = new Date().toISOString();
+  users[u] = {username:u,password:p,avatar:'',bio:'',joined:now,isMod:false};
+  saveUsers(users);
+  showMsg('Account created — you can login now.', false);
+});
+
+loginBtn.addEventListener('click', ()=>{
+  const u = usernameInput.value.trim();
+  const p = passwordInput.value;
+  if(!validUsername(u)){showMsg('Invalid username format.');return}
+  const users = loadUsers();
+  const user = users[u];
+  if(!user || user.password !== p){showMsg('Either put in the correct password/username, or sign up.');return}
+  // check banned
+  const banned = loadBanned();
+  if(banned.includes(u)){showMsg('This account is banned.');return}
+
+  // login
+  CUR_USER = user;
+  onLogin();
+});
+
+function onLogin(){
+  // hide login
+  loginScreen.style.display = 'none';
+  appRoot.style.display = 'flex';
+  // populate left
+  leftUsername.textContent = CUR_USER.username;
+  leftJoinDate.textContent = 'Joined: ' + (new Date(CUR_USER.joined)).toLocaleDateString();
+  if(CUR_USER.avatar) leftAvatar.src = CUR_USER.avatar;
+
+  // show admin only if current user is mod
+  adminPanel.style.display = CUR_USER.isMod ? 'block' : 'none';
+
+  // show profile modal onclick
+  profileBongle.addEventListener('click', ()=>{
+    openProfileModal(CUR_USER.username);
+  });
+
+  // load messages and users
+  renderMessages();
+  renderUserList();
+}
+
+// ---------------------------
+// Messages
+// ---------------------------
+function renderMessages(){
+  const msgs = loadMessages();
+  chatDisplay.innerHTML = '';
+  msgs.forEach(m => {
+    const wrap = document.createElement('div');
+    wrap.className = 'message' + (m.user===CUR_USER.username ? ' me' : '');
+    const img = document.createElement('img');
+    img.src = (m.avatar || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>');
+    img.style.width='36px';img.style.height='36px';img.style.borderRadius='50%';img.style.objectFit='cover';
+    img.style.cursor='pointer';
+    img.addEventListener('click', ()=>openOtherProfile(m.user));
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = '<div style="font-weight:700">'+escapeHtml(m.user)+'</div><div class="meta">'+new Date(m.t).toLocaleTimeString()+ '</div><div style="margin-top:6px">'+escapeHtml(m.text)+'</div>';
+    // clicking username in bubble opens profile
+    bubble.querySelector('div').addEventListener('click', ()=>openOtherProfile(m.user));
+
+    wrap.appendChild(img);
+    wrap.appendChild(bubble);
+    chatDisplay.appendChild(wrap);
+  });
+  chatDisplay.scrollTop = chatDisplay.scrollHeight;
+}
+
+sendBtn.addEventListener('click', sendMessage);
+msgInput.addEventListener('keydown', (e)=>{if(e.key==='Enter'){sendMessage()}});
+
+function sendMessage(){
+  const text = msgInput.value.trim(); if(!text) return;
+  const banned = loadBanned(); if(banned.includes(CUR_USER.username)){alert('You are banned and cannot send messages.');return}
+  const msgs = loadMessages();
+  const m = {user:CUR_USER.username,text:text,t:new Date().toISOString(),avatar:CUR_USER.avatar||''};
+  msgs.push(m); saveMessages(msgs);
+  msgInput.value='';
+  // notify other tabs via storage event (they read messages)
+  localStorage.setItem('veilian_sync','msg:'+Date.now());
+  renderMessages();
+}
+
+// Listen for storage changes to sync across tabs
+window.addEventListener('storage',(e)=>{
+  if(e.key===DB_MESSAGES_KEY || e.key===DB_USERS_KEY || e.key===DB_BANNED_KEY || e.key==='veilian_sync'){
+    // refresh state
+    if(appRoot.style.display!=='none'){
+      renderMessages(); renderUserList();
+    }
+  }
+});
+
+// ---------------------------
+// User list / presence (simple)
+// ---------------------------
+function renderUserList(){
+  const users = loadUsers();
+  userList.innerHTML='';
+  Object.values(users).forEach(u => {
+    const el = document.createElement('div');
+    el.style.display='flex';el.style.alignItems='center';el.style.justifyContent='space-between';el.style.gap='8px';el.style.padding='6px 8px';el.style.borderRadius='8px';
+    el.style.background = '#fff';
+    const left = document.createElement('div'); left.style.display='flex';left.style.alignItems='center';left.style.gap='8px';
+    const av = document.createElement('img'); av.src = u.avatar || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>'; av.style.width='28px';av.style.height='28px';av.style.borderRadius='50%';av.style.objectFit='cover';
+    av.style.cursor='pointer'; av.addEventListener('click', ()=>openOtherProfile(u.username));
+    const name = document.createElement('div'); name.textContent = u.username; name.style.fontWeight='600'; name.style.cursor='pointer'; name.addEventListener('click', ()=>openOtherProfile(u.username));
+    left.appendChild(av); left.appendChild(name);
+    el.appendChild(left);
+    const small = document.createElement('div'); small.textContent = u.isMod ? 'mod' : '';
+    el.appendChild(small);
+    userList.appendChild(el);
+  });
+}
+
+// ---------------------------
+// Admin actions: ban/unban, toggle mod
+// ---------------------------
+banBtn.addEventListener('click', ()=>{
+  const name = adminUserInput.value.trim(); if(!name) return alert('Enter username');
+  const users = loadUsers(); if(!users[name]) return alert('User not found');
+  const banned = loadBanned(); if(!banned.includes(name)){banned.push(name); saveBanned(banned); localStorage.setItem('veilian_sync','ban:'+Date.now()); alert(name+' banned');}
+});
+unbanBtn.addEventListener('click', ()=>{
+  const name = adminUserInput.value.trim(); if(!name) return alert('Enter username');
+  let banned = loadBanned(); if(banned.includes(name)){banned = banned.filter(x=>x!==name); saveBanned(banned); localStorage.setItem('veilian_sync','unban:'+Date.now()); alert(name+' unbanned');}
+});
+
+toggleModBtn.addEventListener('click', ()=>{
+  const name = modUserInput.value.trim(); if(!name) return alert('Enter username');
+  const users = loadUsers(); if(!users[name]) return alert('User not found');
+  users[name].isMod = !users[name].isMod; saveUsers(users); localStorage.setItem('veilian_sync','mod:'+Date.now()); alert(name+' mod toggled to '+users[name].isMod);
+});
+
+// ---------------------------
+// Profile modal (self-editable)
+// ---------------------------
+function openProfileModal(username){
+  // only allow self-edit when username === CUR_USER.username
+  const users = loadUsers(); const user = users[username];
+  if(!user) return;
+  profileNameLarge.textContent = user.username;
+  profileJoinLarge.textContent = (new Date(user.joined)).toLocaleDateString();
+  bioTextarea.value = user.bio || '';
+  profileAvatarLarge.src = user.avatar || profileAvatarLarge.src;
+  profileModal.style.display = 'flex';
+}
+
+profileAvatarLarge.addEventListener('click', ()=> avatarFileInput.click());
+avatarFileInput.addEventListener('change', ()=>{
+  const f = avatarFileInput.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{profileAvatarLarge.src = reader.result; CUR_USER.avatar = reader.result; commitUserChange(); localStorage.setItem('veilian_sync','avatar:'+Date.now());}
+  reader.readAsDataURL(f);
+});
+
+saveBioBtn.addEventListener('click', ()=>{CUR_USER.bio = bioTextarea.value; commitUserChange(); profileModal.style.display='none'; localStorage.setItem('veilian_sync','bio:'+Date.now());});
+cancelBioBtn.addEventListener('click', ()=>{profileModal.style.display='none'});
+closeProfile.addEventListener('click', ()=>{profileModal.style.display='none'});
+
+// ---------------------------
+// Other user's profile (read-only)
+// ---------------------------
+function openOtherProfile(username){
+  const users = loadUsers(); const u = users[username]; if(!u) return alert('User not found');
+  // if it's the current user, open editable modal
+  if(CUR_USER && username === CUR_USER.username){ openProfileModal(username); return }
+  otherAvatarLarge.src = u.avatar || otherAvatarLarge.src;
+  otherNameLarge.textContent = u.username;
+  otherJoinLarge.textContent = (new Date(u.joined)).toLocaleDateString();
+  otherBioTextarea.value = u.bio || '';
+  otherProfileModal.style.display = 'flex';
+}
+closeOtherProfile.addEventListener('click', ()=>{otherProfileModal.style.display='none'});
+
+// ---------------------------
+// Utility: save current user object back to DB
+// ---------------------------
+function commitUserChange(){
+  const users = loadUsers(); if(!CUR_USER) return; users[CUR_USER.username] = CUR_USER; saveUsers(users);
+  // refresh left avatar and name
+  leftAvatar.src = CUR_USER.avatar || leftAvatar.src;
+}
+
+// ---------------------------
+// Escape HTML
+// ---------------------------
+function escapeHtml(s){return (''+s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
+
+// ---------------------------
+// Simple bootstrap for demo (precreate one mod account for convenience)
+// ---------------------------
+(function bootstrap(){
+  const users = loadUsers();
+  if(!users['ArnekChurchill']){
+    const now = new Date().toISOString();
+    users['ArnekChurchill'] = {username:'ArnekChurchill',password:'988585aw',avatar:'',bio:'Moderator account',joined:now,isMod:true};
+    saveUsers(users);
+  }
+})();
+
+</script>
 </body>
 </html>
