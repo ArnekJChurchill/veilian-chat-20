@@ -51,7 +51,6 @@
   .small{font-size:13px;color:var(--muted)}
   .hidden{display:none}
 
-  /* Responsive tweaks */
   @media (max-width:900px){.admin{display:none}.left{display:none}}
 </style>
 </head>
@@ -76,7 +75,7 @@
   </div>
 </div>
 
-<!-- MAIN APP (hidden until login) -->
+<!-- MAIN APP -->
 <div id="appRoot" class="app hidden" style="display:none">
   <div class="left">
     <div class="profile-small" id="profileBongle">
@@ -124,13 +123,12 @@
   </div>
 </div>
 
-<!-- Profile modal (self-editable) -->
+<!-- Profile modal -->
 <div id="profileModal" class="modal">
   <div class="panel">
     <button class="exit" id="closeProfile">✕</button>
-    <img id="profileAvatarLarge" class="profile-avatar-large" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>" title="Click to upload" />
+    <img id="profileAvatarLarge" class="profile-avatar-large" title="Click to upload" />
     <h2 id="profileNameLarge">username</h2>
-
     <div class="bio-section">
       <label class="small">Bio</label>
       <textarea id="bio"></textarea>
@@ -139,17 +137,16 @@
         <button id="cancelBioBtn" class="secondary">Cancel</button>
       </div>
     </div>
-
     <p class="small" style="margin-top:8px">Joined: <span id="profileJoinLarge">—</span></p>
     <input id="avatarFileInput" type="file" accept="image/*" class="hidden" />
   </div>
 </div>
 
-<!-- Other user's profile modal (read-only) -->
+<!-- Other user's profile modal -->
 <div id="otherProfileModal" class="modal">
   <div class="panel">
     <button class="exit" id="closeOtherProfile">✕</button>
-    <img id="otherAvatarLarge" class="profile-avatar-large" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>" />
+    <img id="otherAvatarLarge" class="profile-avatar-large" />
     <h2 id="otherNameLarge">other user</h2>
     <div class="bio-section">
       <label class="small">Bio</label>
@@ -161,41 +158,43 @@
 
 <!-- Include Pusher -->
 <script src="https://js.pusher.com/8.2/pusher.min.js"></script>
-
 <script>
-// ---------------------------
-// Pusher config
-// ---------------------------
+/* ---------------------------
+   Pusher setup
+--------------------------- */
 const PUSHER_KEY = "b7d05dcc13df522efbbc";
 const PUSHER_CLUSTER = "us2";
-const pusher = new Pusher(PUSHER_KEY, {
-  cluster: PUSHER_CLUSTER,
-  forceTLS: true
-});
+const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER, forceTLS:true });
 const channel = pusher.subscribe('veilian-chat');
 
-// ---------------------------
-// Your existing localStorage-based code starts here
-// ---------------------------
-// (Insert your full previous code here, then in key actions trigger Pusher events)
-// ---------------------------
+/* ---------------------------
+   LocalStorage backend + UI
+   (All original code)
+--------------------------- */
 
-// Example: sending message triggers Pusher
+// (Insert your full previous JS code here, e.g., login/signup, messages, profiles, admin panel)
+
+// Example Pusher integration in sendMessage:
 function sendMessage(){
   const text = msgInput.value.trim(); if(!text) return;
-  const banned = loadBanned(); if(banned.includes(CUR_USER.username)){alert('You are banned'); return;}
+  const banned = loadBanned(); if(banned.includes(CUR_USER.username)){alert('You are banned');return;}
   const msgs = loadMessages();
-  const m = {user:CUR_USER.username,text:text,t:new Date().toISOString(),avatar:CUR_USER.avatar||''};
+  const m = {user:CUR_USER.username,text,text,t:new Date().toISOString(),avatar:CUR_USER.avatar||''};
   msgs.push(m); saveMessages(msgs);
-  msgInput.value='';
+  msgInput.value=''; renderMessages();
   localStorage.setItem('veilian_sync','msg:'+Date.now());
-  renderMessages();
 
-  if(typeof channel.trigger==='function') channel.trigger('client-new-message', m);
+  // send Pusher event
+  if(channel && channel.trigger) channel.trigger('client-new-message', m);
 }
 
-// Similarly, trigger Pusher events for ban/unban, toggleMod, and profile update
-</script>
+// Listen to Pusher events from other clients
+channel.bind('client-new-message', function(m){
+  const msgs = loadMessages();
+  msgs.push(m); saveMessages(msgs); renderMessages();
+});
 
+// Repeat similar for ban/unban, toggleMod, avatar/bio changes using Pusher client events
+</script>
 </body>
 </html>
