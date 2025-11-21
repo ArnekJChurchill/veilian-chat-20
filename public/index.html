@@ -159,10 +159,9 @@
 
 <script>
 // ---------------------------
-// localStorage backend + Pusher integration
+// localStorage backend + Pusher integration (private channel)
 // ---------------------------
 
-// Keys
 const DB_USERS_KEY = 'veilian_users_v1';
 const DB_MESSAGES_KEY = 'veilian_messages_v1';
 const DB_BANNED_KEY = 'veilian_banned_v1';
@@ -176,68 +175,75 @@ function saveBanned(b){localStorage.setItem(DB_BANNED_KEY, JSON.stringify(b))}
 
 function validUsername(u){return /^[A-Za-z0-9-]{3,32}$/.test(u)}
 
-const loginScreen = document.getElementById('loginScreen');
-const appRoot = document.getElementById('appRoot');
-const loginMsg = document.getElementById('loginMsg');
-const usernameInput = document.getElementById('usernameInput');
-const passwordInput = document.getElementById('passwordInput');
-const loginBtn = document.getElementById('loginBtn');
-const signupBtn = document.getElementById('signupBtn');
+// DOM references
+const loginScreen=document.getElementById('loginScreen');
+const appRoot=document.getElementById('appRoot');
+const loginMsg=document.getElementById('loginMsg');
+const usernameInput=document.getElementById('usernameInput');
+const passwordInput=document.getElementById('passwordInput');
+const loginBtn=document.getElementById('loginBtn');
+const signupBtn=document.getElementById('signupBtn');
 
-const leftAvatar = document.getElementById('leftAvatar');
-const leftUsername = document.getElementById('leftUsername');
-const leftJoinDate = document.getElementById('leftJoinDate');
-const profileBongle = document.getElementById('profileBongle');
+const leftAvatar=document.getElementById('leftAvatar');
+const leftUsername=document.getElementById('leftUsername');
+const leftJoinDate=document.getElementById('leftJoinDate');
+const profileBongle=document.getElementById('profileBongle');
 
-const chatDisplay = document.getElementById('chatDisplay');
-const msgInput = document.getElementById('msgInput');
-const sendBtn = document.getElementById('sendBtn');
+const chatDisplay=document.getElementById('chatDisplay');
+const msgInput=document.getElementById('msgInput');
+const sendBtn=document.getElementById('sendBtn');
 
-const userList = document.getElementById('userList');
+const userList=document.getElementById('userList');
 
-const adminPanel = document.getElementById('adminPanel');
-const adminUserInput = document.getElementById('adminUserInput');
-const banBtn = document.getElementById('banBtn');
-const unbanBtn = document.getElementById('unbanBtn');
-const modUserInput = document.getElementById('modUserInput');
-const toggleModBtn = document.getElementById('toggleModBtn');
+const adminPanel=document.getElementById('adminPanel');
+const adminUserInput=document.getElementById('adminUserInput');
+const banBtn=document.getElementById('banBtn');
+const unbanBtn=document.getElementById('unbanBtn');
+const modUserInput=document.getElementById('modUserInput');
+const toggleModBtn=document.getElementById('toggleModBtn');
 
-const profileModal = document.getElementById('profileModal');
-const profileAvatarLarge = document.getElementById('profileAvatarLarge');
-const profileNameLarge = document.getElementById('profileNameLarge');
-const profileJoinLarge = document.getElementById('profileJoinLarge');
-const bioTextarea = document.getElementById('bio');
-const saveBioBtn = document.getElementById('saveBioBtn');
-const cancelBioBtn = document.getElementById('cancelBioBtn');
-const avatarFileInput = document.getElementById('avatarFileInput');
-const closeProfile = document.getElementById('closeProfile');
+const profileModal=document.getElementById('profileModal');
+const profileAvatarLarge=document.getElementById('profileAvatarLarge');
+const profileNameLarge=document.getElementById('profileNameLarge');
+const profileJoinLarge=document.getElementById('profileJoinLarge');
+const bioTextarea=document.getElementById('bio');
+const saveBioBtn=document.getElementById('saveBioBtn');
+const cancelBioBtn=document.getElementById('cancelBioBtn');
+const avatarFileInput=document.getElementById('avatarFileInput');
+const closeProfile=document.getElementById('closeProfile');
 
-const otherProfileModal = document.getElementById('otherProfileModal');
-const closeOtherProfile = document.getElementById('closeOtherProfile');
-const otherAvatarLarge = document.getElementById('otherAvatarLarge');
-const otherNameLarge = document.getElementById('otherNameLarge');
-const otherJoinLarge = document.getElementById('otherJoinLarge');
-const otherBioTextarea = document.getElementById('otherBio');
+const otherProfileModal=document.getElementById('otherProfileModal');
+const closeOtherProfile=document.getElementById('closeOtherProfile');
+const otherAvatarLarge=document.getElementById('otherAvatarLarge');
+const otherNameLarge=document.getElementById('otherNameLarge');
+const otherJoinLarge=document.getElementById('otherJoinLarge');
+const otherBioTextarea=document.getElementById('otherBio');
 
-let CUR_USER = null;
-
-// ---------------------------
-// Pusher Setup
-// ---------------------------
-const PUSHER_KEY = "b7d05dcc13df522efbbc";
-const PUSHER_CLUSTER = "us2";
-const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER, forceTLS:true });
-const channel = pusher.subscribe('veilian-chat');
-
-function triggerEvent(eventName, data){try{if(channel && channel.trigger) channel.trigger('client-'+eventName, data);}catch(e){console.warn(e)}}
+let CUR_USER=null;
 
 // ---------------------------
-// Account actions
+// Pusher Setup (private channel)
+// ---------------------------
+const PUSHER_KEY="b7d05dcc13df522efbbc";
+const PUSHER_CLUSTER="us2";
+const pusher=new Pusher(PUSHER_KEY,{
+  cluster:PUSHER_CLUSTER,
+  forceTLS:true,
+  authEndpoint:'http://localhost:5000/pusher/auth'
+});
+const channel=pusher.subscribe('private-veilian-chat');
+
+function triggerEvent(eventName,data){
+  try{channel.trigger('client-'+eventName,data)}catch(e){console.warn(e)}
+}
+
+// ---------------------------
+// Login / Signup
 // ---------------------------
 function showMsg(text,error=true){loginMsg.textContent=text;loginMsg.style.color=error?'var(--danger)':'green'}
 
-signupBtn.addEventListener('click', ()=>{
-  const u=usernameInput.value.trim(); const p=passwordInput.value;
+signupBtn.addEventListener('click',()=>{
+  const u=usernameInput.value.trim(),p=passwordInput.value;
   if(!validUsername(u)){showMsg('Invalid username. Use 3-32 chars: letters, numbers, hyphens.');return;}
   if(!p||p.length<4){showMsg('Password must be at least 4 chars.');return;}
   const users=loadUsers();
@@ -247,10 +253,10 @@ signupBtn.addEventListener('click', ()=>{
   saveUsers(users); showMsg('Account created — you can login now.',false);
 });
 
-loginBtn.addEventListener('click', ()=>{
-  const u=usernameInput.value.trim(); const p=passwordInput.value;
+loginBtn.addEventListener('click',()=>{
+  const u=usernameInput.value.trim(),p=passwordInput.value;
   if(!validUsername(u)){showMsg('Invalid username format.');return;}
-  const users=loadUsers(); const user=users[u];
+  const users=loadUsers(),user=users[u];
   if(!user||user.password!==p){showMsg('Either put in the correct password/username, or sign up.');return;}
   const banned=loadBanned();
   if(banned.includes(u)){showMsg('This account is banned.');return;}
@@ -258,12 +264,13 @@ loginBtn.addEventListener('click', ()=>{
 });
 
 function onLogin(){
-  loginScreen.style.display='none'; appRoot.style.display='flex';
+  loginScreen.style.display='none';
+  appRoot.style.display='flex';
   leftUsername.textContent=CUR_USER.username;
   leftJoinDate.textContent='Joined: '+(new Date(CUR_USER.joined)).toLocaleDateString();
   if(CUR_USER.avatar) leftAvatar.src=CUR_USER.avatar;
   adminPanel.style.display=CUR_USER.isMod?'block':'none';
-  profileBongle.addEventListener('click', ()=>openProfileModal(CUR_USER.username));
+  profileBongle.addEventListener('click',()=>openProfileModal(CUR_USER.username));
   renderMessages(); renderUserList();
 }
 
@@ -276,10 +283,10 @@ function renderMessages(){
     const wrap=document.createElement('div'); wrap.className='message'+(m.user===CUR_USER.username?' me':'');
     const img=document.createElement('img'); img.src=m.avatar||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>';
     img.style.width='36px'; img.style.height='36px'; img.style.borderRadius='50%'; img.style.objectFit='cover'; img.style.cursor='pointer';
-    img.addEventListener('click', ()=>openOtherProfile(m.user));
+    img.addEventListener('click',()=>openOtherProfile(m.user));
     const bubble=document.createElement('div'); bubble.className='bubble';
     bubble.innerHTML='<div style="font-weight:700">'+escapeHtml(m.user)+'</div><div class="meta">'+new Date(m.t).toLocaleTimeString()+ '</div><div style="margin-top:6px">'+escapeHtml(m.text)+'</div>';
-    bubble.querySelector('div').addEventListener('click', ()=>openOtherProfile(m.user));
+    bubble.querySelector('div').addEventListener('click',()=>openOtherProfile(m.user));
     wrap.appendChild(img); wrap.appendChild(bubble); chatDisplay.appendChild(wrap);
   });
   chatDisplay.scrollTop=chatDisplay.scrollHeight;
@@ -293,13 +300,17 @@ function sendMessage(){
   const banned=loadBanned(); if(banned.includes(CUR_USER.username)){alert('You are banned');return;}
   const msgs=loadMessages();
   const m={user:CUR_USER.username,text:text,t:new Date().toISOString(),avatar:CUR_USER.avatar||''};
-  msgs.push(m); saveMessages(msgs); msgInput.value=''; renderMessages(); localStorage.setItem('veilian_sync','msg:'+Date.now());
+  msgs.push(m); saveMessages(msgs); msgInput.value=''; renderMessages();
+  localStorage.setItem('veilian_sync','msg:'+Date.now());
   triggerEvent('new-message',m);
 }
-channel.bind('client-new-message', function(m){const msgs=loadMessages(); msgs.push(m); saveMessages(msgs); renderMessages();});
+
+channel.bind('client-new-message', function(m){
+  const msgs=loadMessages(); msgs.push(m); saveMessages(msgs); renderMessages();
+});
 
 // ---------------------------
-// User list
+// Users
 // ---------------------------
 function renderUserList(){
   const users=loadUsers(); userList.innerHTML='';
@@ -307,77 +318,68 @@ function renderUserList(){
     const el=document.createElement('div'); el.style.display='flex'; el.style.alignItems='center'; el.style.justifyContent='space-between'; el.style.gap='8px'; el.style.padding='6px 8px'; el.style.borderRadius='8px'; el.style.background='#fff';
     const left=document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='8px';
     const av=document.createElement('img'); av.src=u.avatar||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>'; av.style.width='32px'; av.style.height='32px'; av.style.borderRadius='50%'; av.style.objectFit='cover';
-    av.addEventListener('click',()=>openOtherProfile(u.username));
-    const name=document.createElement('span'); name.textContent=u.username+(u.isMod?' (mod)':'');
-    left.appendChild(av); left.appendChild(name); el.appendChild(left); userList.appendChild(el);
+    const name=document.createElement('div'); name.textContent=u.username; name.style.fontWeight='600'; left.appendChild(av); left.appendChild(name);
+    el.appendChild(left);
+    el.addEventListener('click',()=>openOtherProfile(u.username));
+    userList.appendChild(el);
   });
 }
 
 // ---------------------------
-// Profile modals
+// Profile Modals
 // ---------------------------
 function openProfileModal(username){
+  const u=loadUsers()[username]; if(!u) return;
   profileModal.style.display='flex';
-  profileNameLarge.textContent=username;
-  profileJoinLarge.textContent=new Date(CUR_USER.joined).toLocaleDateString();
-  profileAvatarLarge.src=CUR_USER.avatar||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"></svg>';
-  bioTextarea.value=CUR_USER.bio||'';
+  profileAvatarLarge.src=u.avatar||profileAvatarLarge.src;
+  profileNameLarge.textContent=u.username;
+  profileJoinLarge.textContent=(new Date(u.joined)).toLocaleDateString();
+  bioTextarea.value=u.bio||'';
 }
-closeProfile.addEventListener('click',()=>profileModal.style.display='none');
+
+saveBioBtn.addEventListener('click',()=>{
+  const users=loadUsers(); users[CUR_USER.username].bio=bioTextarea.value; saveUsers(users);
+  profileModal.style.display='none';
+  triggerEvent('update-bio',{user:CUR_USER.username,bio:bioTextarea.value});
+});
+
 cancelBioBtn.addEventListener('click',()=>profileModal.style.display='none');
+closeProfile.addEventListener('click',()=>profileModal.style.display='none');
 
 profileAvatarLarge.addEventListener('click',()=>avatarFileInput.click());
-avatarFileInput.addEventListener('change',()=>{
-  const f=avatarFileInput.files[0]; if(!f) return;
-  const reader=new FileReader();
-  reader.onload=()=>{
-    profileAvatarLarge.src=reader.result; CUR_USER.avatar=reader.result; commitUserChange(); triggerEvent('update-avatar',{username:CUR_USER.username,avatar:CUR_USER.avatar}); renderUserList();
-  }
-  reader.readAsDataURL(f);
-});
-saveBioBtn.addEventListener('click',()=>{
-  CUR_USER.bio=bioTextarea.value; commitUserChange(); profileModal.style.display='none'; triggerEvent('update-bio',{username:CUR_USER.username,bio:CUR_USER.bio});
-});
+avatarFileInput.addEventListener('change',()=>{const file=avatarFileInput.files[0];if(file){const reader=new FileReader();reader.onload=e=>{const users=loadUsers();users[CUR_USER.username].avatar=e.target.result;saveUsers(users);CUR_USER.avatar=e.target.result;profileAvatarLarge.src=e.target.result;leftAvatar.src=e.target.result;triggerEvent('update-avatar',{user:CUR_USER.username,avatar:e.target.result});};reader.readAsDataURL(file);}});
 
-function commitUserChange(){const users=loadUsers(); users[CUR_USER.username]=CUR_USER; saveUsers(users);}
-
-// Other profile (read-only)
 function openOtherProfile(username){
-  if(username===CUR_USER.username){openProfileModal(username);return;}
-  const users=loadUsers(); const u=users[username]; if(!u) return alert('User not found');
+  const u=loadUsers()[username]; if(!u) return;
   otherProfileModal.style.display='flex';
-  otherNameLarge.textContent=u.username; otherJoinLarge.textContent=new Date(u.joined).toLocaleDateString();
-  otherAvatarLarge.src=u.avatar||'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"></svg>';
+  otherAvatarLarge.src=u.avatar||otherAvatarLarge.src;
+  otherNameLarge.textContent=u.username;
+  otherJoinLarge.textContent=(new Date(u.joined)).toLocaleDateString();
   otherBioTextarea.value=u.bio||'';
 }
 closeOtherProfile.addEventListener('click',()=>otherProfileModal.style.display='none');
 
 // ---------------------------
-// Moderation
+// Admin / Mod actions
 // ---------------------------
 banBtn.addEventListener('click',()=>{
-  const name=adminUserInput.value.trim(); if(!name) return alert('Enter username'); const users=loadUsers();
-  if(!users[name]) return alert('User not found'); let banned=loadBanned(); if(!banned.includes(name)){banned.push(name); saveBanned(banned); localStorage.setItem('veilian_sync','ban:'+Date.now()); triggerEvent('ban-user',{username:name}); alert(name+' banned');}
+  const u=adminUserInput.value.trim(); if(!u) return;
+  const banned=loadBanned(); if(!banned.includes(u)){banned.push(u); saveBanned(banned);}
 });
 unbanBtn.addEventListener('click',()=>{
-  const name=adminUserInput.value.trim(); if(!name) return alert('Enter username'); let banned=loadBanned(); if(banned.includes(name)){banned=banned.filter(x=>x!==name); saveBanned(banned); localStorage.setItem('veilian_sync','unban:'+Date.now()); triggerEvent('unban-user',{username:name}); alert(name+' unbanned');}
+  const u=adminUserInput.value.trim(); if(!u) return;
+  const banned=loadBanned(); const idx=banned.indexOf(u); if(idx>-1){banned.splice(idx,1); saveBanned(banned);}
 });
 toggleModBtn.addEventListener('click',()=>{
-  const name=modUserInput.value.trim(); if(!name) return alert('Enter username'); const users=loadUsers(); if(!users[name]) return alert('User not found');
-  users[name].isMod=!users[name].isMod; saveUsers(users); triggerEvent('toggle-mod',{username:name,isMod:users[name].isMod}); renderUserList(); alert(name+' mod toggled to '+users[name].isMod);
+  const u=modUserInput.value.trim(); if(!u) return;
+  const users=loadUsers(); if(users[u]){users[u].isMod=!users[u].isMod; saveUsers(users);}
 });
 
-// Pusher bindings for mod actions
-channel.bind('client-ban-user', data=>{let banned=loadBanned(); if(!banned.includes(data.username)){banned.push(data.username); saveBanned(banned);}});
-channel.bind('client-unban-user', data=>{let banned=loadBanned(); let b=banned.filter(x=>x!==data.username); saveBanned(b);});
-channel.bind('client-toggle-mod', data=>{const users=loadUsers(); if(users[data.username]){users[data.username].isMod=data.isMod; saveUsers(users); renderUserList();}});
-channel.bind('client-update-bio', data=>{const users=loadUsers(); if(users[data.username]){users[data.username].bio=data.bio; saveUsers(users);}});
-channel.bind('client-update-avatar', data=>{const users=loadUsers(); if(users[data.username]){users[data.username].avatar=data.avatar; saveUsers(users); renderUserList(); if(CUR_USER.username===data.username) leftAvatar.src=data.avatar;}});
+// ---------------------------
+// Helpers
+// ---------------------------
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
-// ---------------------------
-// Utilities
-// ---------------------------
-function escapeHtml(text){return text.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 </script>
 </body>
 </html>
